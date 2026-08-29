@@ -1,0 +1,8 @@
+{
+  "name": "Easy House",
+  "description": "Easy House Cameroon is a Real Estate Company Based in Buea, Cameroon and operational in Douala, Limbe & Yaoundé with the goal of bridging the gap between property owners and clients.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
