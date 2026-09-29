@@ -24,30 +24,57 @@ import {
   resetServerProperties,
 } from './utils/api';
 
-const STORAGE_KEY = 'horizon_estate_properties_v2';
+const STORAGE_KEY_PROPERTIES = 'easyhouse_cameroon_properties_v4';
+const STORAGE_KEY_DELETED = 'easyhouse_cameroon_deleted_ids_v4';
+
+function getStoredDeletedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DELETED);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed);
+      }
+    }
+  } catch (e) {
+    console.error('Error reading deleted property IDs:', e);
+  }
+  return new Set<string>();
+}
+
+function saveStoredDeletedIds(ids: Set<string>): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_DELETED, JSON.stringify(Array.from(ids)));
+  } catch (e) {
+    console.error('Error saving deleted property IDs:', e);
+  }
+}
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<AppPage>('home');
   const [propertiesList, setPropertiesList] = useState<Property[]>(() => {
+    const deletedIds = getStoredDeletedIds();
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY_PROPERTIES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((p: Property) => !deletedIds.has(p.id));
         }
       }
     } catch (e) {
       console.error('Error loading properties from storage:', e);
     }
-    return PROPERTIES;
+    return PROPERTIES.filter((p) => !deletedIds.has(p.id));
   });
 
   // Fetch live properties from Express backend on start
   useEffect(() => {
     fetchServerProperties().then((serverProps) => {
-      if (serverProps && Array.isArray(serverProps) && serverProps.length > 0) {
-        setPropertiesList(serverProps);
+      if (serverProps && Array.isArray(serverProps)) {
+        const deletedIds = getStoredDeletedIds();
+        const activeProps = serverProps.filter((p: Property) => !deletedIds.has(p.id));
+        setPropertiesList(activeProps);
       }
     });
   }, []);
@@ -60,7 +87,7 @@ export default function App() {
   // Sync to local storage whenever propertiesList changes
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(propertiesList));
+      localStorage.setItem(STORAGE_KEY_PROPERTIES, JSON.stringify(propertiesList));
     } catch (e) {
       console.error('Error saving properties to storage:', e);
     }
@@ -213,6 +240,13 @@ export default function App() {
   };
 
   const handleAddProperty = (newProp: Property) => {
+    // If this ID was previously marked deleted, unmark it
+    const deleted = getStoredDeletedIds();
+    if (deleted.has(newProp.id)) {
+      deleted.delete(newProp.id);
+      saveStoredDeletedIds(deleted);
+    }
+
     setPropertiesList((prev) => [newProp, ...prev]);
     setSpotlightProperty(newProp);
     // Sync with backend API
@@ -238,6 +272,11 @@ export default function App() {
   };
 
   const handleRemoveProperty = (propertyId: string) => {
+    // Record deletion immediately in persistent storage
+    const deleted = getStoredDeletedIds();
+    deleted.add(propertyId);
+    saveStoredDeletedIds(deleted);
+
     setPropertiesList((prev) => {
       const updated = prev.filter((p) => p.id !== propertyId);
       // Update spotlight if current spotlight was removed
@@ -257,10 +296,12 @@ export default function App() {
   };
 
   const handleResetProperties = () => {
+    saveStoredDeletedIds(new Set());
     setPropertiesList(PROPERTIES);
     setSpotlightProperty(PROPERTIES[0]);
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY_PROPERTIES);
+      localStorage.removeItem(STORAGE_KEY_DELETED);
     } catch (e) {
       console.error('Error clearing storage:', e);
     }

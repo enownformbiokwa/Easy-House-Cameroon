@@ -53,6 +53,7 @@ import {
 } from '../utils/api';
 import { AdminSecurityCenter } from '../components/AdminSecurityCenter';
 import logoImg from '../assets/images/logo.webp';
+import dpImage from '../assets/images/dp.webp';
 
 interface AdminDashboardProps {
   properties: Property[];
@@ -509,7 +510,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ...editingProperty.agent,
         name: editAgentName || editingProperty.agent?.name || 'Enownfor Manyi-Oben',
         phone: editAgentPhone || editingProperty.agent?.phone || '677499722',
-        avatar: editingProperty.agent?.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
+        avatar: editingProperty.agent?.avatar || dpImage,
       },
     };
 
@@ -584,7 +585,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       featured: true,
       agent: {
         name: formAgentName || 'Enownfor Manyi-Oben',
-        avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
+        avatar: dpImage,
         phone: formAgentPhone || '677499722',
         role: 'Property Manager',
       },

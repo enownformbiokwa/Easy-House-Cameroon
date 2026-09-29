@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
@@ -10,15 +11,122 @@ import { Property } from './src/types';
 const PORT = 3000;
 const HOST = '0.0.0.0';
 
+// Persistent Storage Directories & Files
+const DATA_DIR = path.join(process.cwd(), 'data');
+const PROPERTIES_FILE = path.join(DATA_DIR, 'properties.json');
+const DELETED_IDS_FILE = path.join(DATA_DIR, 'deleted_property_ids.json');
+const ADMIN_CONFIG_FILE = path.join(DATA_DIR, 'admin_config.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    console.error('Failed to create data directory:', err);
+  }
+}
+
 // Configuration from environment or defaults
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'emanyioben1@gmail.com';
 const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'AdminSecure2026!';
 const JWT_SECRET = process.env.JWT_SECRET || 'easyhouse_cameroon_jwt_secure_master_key_2026_x89q2';
 const JWT_EXPIRES_IN = '24h';
 
-// Password hash state (persists during server runtime, can be updated via change-password API)
-let adminHashedPassword = bcrypt.hashSync(INITIAL_ADMIN_PASSWORD, 10);
-let adminEmail = ADMIN_EMAIL;
+// Admin config persistence helpers
+function loadAdminConfig(): { hashedPassword?: string; email?: string; is2FA?: boolean } {
+  try {
+    if (fs.existsSync(ADMIN_CONFIG_FILE)) {
+      const data = JSON.parse(fs.readFileSync(ADMIN_CONFIG_FILE, 'utf-8'));
+      return data || {};
+    }
+  } catch (e) {
+    console.error('Error loading admin config:', e);
+  }
+  return {};
+}
+
+function saveAdminConfig(): void {
+  try {
+    fs.writeFileSync(
+      ADMIN_CONFIG_FILE,
+      JSON.stringify(
+        {
+          hashedPassword: adminHashedPassword,
+          email: adminEmail,
+          is2FA: is2FAEnabled,
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+  } catch (e) {
+    console.error('Error saving admin config:', e);
+  }
+}
+
+const savedAdminConfig = loadAdminConfig();
+let adminHashedPassword = savedAdminConfig.hashedPassword || bcrypt.hashSync(INITIAL_ADMIN_PASSWORD, 10);
+let adminEmail = savedAdminConfig.email || ADMIN_EMAIL;
+let is2FAEnabled = savedAdminConfig.is2FA ?? false;
+
+// Deleted property IDs tracking (ensures deleted items NEVER get restored on server restart)
+function loadDeletedIds(): Set<string> {
+  try {
+    if (fs.existsSync(DELETED_IDS_FILE)) {
+      const raw = fs.readFileSync(DELETED_IDS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed);
+      }
+    }
+  } catch (err) {
+    console.error('Error reading deleted IDs file:', err);
+  }
+  return new Set<string>();
+}
+
+function saveDeletedIds(ids: Set<string>): void {
+  try {
+    fs.writeFileSync(DELETED_IDS_FILE, JSON.stringify(Array.from(ids), null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving deleted IDs file:', err);
+  }
+}
+
+let deletedPropertyIds = loadDeletedIds();
+
+// Persistent Properties Store Helpers
+function loadPropertiesStore(): Property[] {
+  try {
+    if (fs.existsSync(PROPERTIES_FILE)) {
+      const raw = fs.readFileSync(PROPERTIES_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Return existing persisted list, filtering out any deleted IDs
+        return parsed.filter((p: Property) => !deletedPropertyIds.has(p.id));
+      }
+    }
+  } catch (err) {
+    console.error('Error reading properties store file:', err);
+  }
+
+  // First boot or missing file: initialize with curated portfolio excluding any deleted items
+  const initial = (INITIAL_PROPERTIES as Property[]).filter((p) => !deletedPropertyIds.has(p.id));
+  savePropertiesStore(initial);
+  return initial;
+}
+
+function savePropertiesStore(properties: Property[]): void {
+  try {
+    fs.writeFileSync(PROPERTIES_FILE, JSON.stringify(properties, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing properties store file:', err);
+  }
+}
+
+// Durable property inventory state persisted to disk
+let propertiesStore: Property[] = loadPropertiesStore();
 
 // Resilient verification helpers
 function verifyAdminPassword(inputPassword: string): boolean {
@@ -61,12 +169,8 @@ function verifyAdminEmail(inputEmail: string): boolean {
 }
 
 // 2FA Security State
-let is2FAEnabled = false;
 let current2FASecret = 'EASYHOUSE-SECURE-2FA-CAMEROON-2026';
 const temp2FASessions = new Map<string, { email: string; expiresAt: number; expectedOtp: string }>();
-
-// In-memory property inventory state initialized with curated Cameroon portfolio
-let propertiesStore: Property[] = JSON.parse(JSON.stringify(INITIAL_PROPERTIES));
 
 // Security Audit Log System
 export interface AuditLogEntry {
@@ -527,6 +631,7 @@ async function startServer() {
     }
 
     adminHashedPassword = bcrypt.hashSync(newPassword, 10);
+    saveAdminConfig();
     logSecurityEvent('PASSWORD_CHANGED', getClientIdentifier(req), 'SUCCESS', 'Admin master password updated with bcrypt salt (rounds: 10).');
 
     res.json({
@@ -572,6 +677,7 @@ async function startServer() {
     }
 
     is2FAEnabled = Boolean(enable);
+    saveAdminConfig();
     logSecurityEvent(
       '2FA_STATUS_CHANGED',
       getClientIdentifier(req),
@@ -641,6 +747,11 @@ async function startServer() {
     };
 
     propertiesStore.unshift(newProperty);
+    if (deletedPropertyIds.has(newProperty.id)) {
+      deletedPropertyIds.delete(newProperty.id);
+      saveDeletedIds(deletedPropertyIds);
+    }
+    savePropertiesStore(propertiesStore);
     logSecurityEvent('PROPERTY_CREATED', getClientIdentifier(req), 'SUCCESS', `Added property: "${newProperty.title}" (${newProperty.id}).`);
 
     res.status(201).json({
@@ -667,6 +778,7 @@ async function startServer() {
       id, // keep immutable ID
     };
 
+    savePropertiesStore(propertiesStore);
     logSecurityEvent('PROPERTY_UPDATED', getClientIdentifier(req), 'SUCCESS', `Updated property: "${propertiesStore[index].title}" (${id}).`);
 
     res.json({
@@ -689,6 +801,10 @@ async function startServer() {
       return;
     }
 
+    deletedPropertyIds.add(id);
+    saveDeletedIds(deletedPropertyIds);
+    savePropertiesStore(propertiesStore);
+
     logSecurityEvent('PROPERTY_DELETED', getClientIdentifier(req), 'WARNING', `Deleted property: "${removedItem?.title || id}" (${id}).`);
 
     res.json({
@@ -699,7 +815,10 @@ async function startServer() {
 
   // 5. Protected: Reset Properties to Default Seed
   app.post('/api/properties/reset', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+    deletedPropertyIds.clear();
+    saveDeletedIds(deletedPropertyIds);
     propertiesStore = JSON.parse(JSON.stringify(INITIAL_PROPERTIES));
+    savePropertiesStore(propertiesStore);
     logSecurityEvent('INVENTORY_RESET', getClientIdentifier(req), 'WARNING', 'Restored default Cameroon property portfolio.');
 
     res.json({

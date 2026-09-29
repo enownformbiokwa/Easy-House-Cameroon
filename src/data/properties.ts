@@ -5,8 +5,8 @@ export const SHOWCASE_IMAGE = 'https://images.unsplash.com/photo-1600585154526-9
 
 export const DEFAULT_AGENT = {
   name: 'Enownfor Manyi-Oben',
-  role: '',
-  avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
+  role: 'Lead Real Estate Consultant',
+  avatar: '/src/assets/images/dp.webp',
   phone: '677499722',
   whatsapp: '674121117',
   email: 'info@easyhousecameroon.com',

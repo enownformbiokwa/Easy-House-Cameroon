@@ -1,5 +1,6 @@
 import React from 'react';
 import { Property } from '../types';
+import dpImage from '../assets/images/dp.webp';
 import {
   Bookmark,
   ChevronRight,
@@ -176,8 +177,8 @@ export const PropertyGrid: React.FC<PropertyGridProps> = ({
                     {prop.agent && (
                       <div className="flex items-center gap-2">
                         <img
-                          src={prop.agent.avatar}
-                          alt={prop.agent.name}
+                          src={dpImage}
+                          alt={prop.agent.name || 'Enownfor Manyi-Oben'}
                           referrerPolicy="no-referrer"
                           className="w-7 h-7 rounded-full object-cover border border-zinc-200"
                         />
