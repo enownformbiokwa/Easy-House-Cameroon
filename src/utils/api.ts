@@ -289,18 +289,41 @@ export async function revokeAllSessions(): Promise<{ success: boolean; message?:
 // ==========================================
 
 export async function fetchServerProperties(): Promise<Property[] | null> {
+  // 1. Try Express API endpoint
   try {
     const res = await fetch('/api/properties');
     if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.properties)) {
-        return data.properties;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data && Array.isArray(data.properties)) {
+          return data.properties;
+        }
+        if (Array.isArray(data)) {
+          return data;
+        }
       }
     }
-    return null;
-  } catch {
-    return null;
-  }
+  } catch {}
+
+  // 2. Fallback to static /properties.json (for Netlify, static hosting, or direct access)
+  try {
+    const res = await fetch('/properties.json');
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data;
+        }
+        if (data && Array.isArray(data.properties)) {
+          return data.properties;
+        }
+      }
+    }
+  } catch {}
+
+  return null;
 }
 
 export async function createServerProperty(property: Property): Promise<{ success: boolean; property?: Property; error?: string }> {

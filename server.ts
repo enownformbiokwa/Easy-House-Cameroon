@@ -16,13 +16,22 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const PROPERTIES_FILE = path.join(DATA_DIR, 'properties.json');
 const DELETED_IDS_FILE = path.join(DATA_DIR, 'deleted_property_ids.json');
 const ADMIN_CONFIG_FILE = path.join(DATA_DIR, 'admin_config.json');
+const PUBLIC_DIR = path.join(process.cwd(), 'public');
+const PUBLIC_PROPERTIES_FILE = path.join(PUBLIC_DIR, 'properties.json');
 
-// Ensure data directory exists
+// Ensure data and public directories exist
 if (!fs.existsSync(DATA_DIR)) {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   } catch (err) {
     console.error('Failed to create data directory:', err);
+  }
+}
+if (!fs.existsSync(PUBLIC_DIR)) {
+  try {
+    fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+  } catch (err) {
+    console.error('Failed to create public directory:', err);
   }
 }
 
@@ -118,10 +127,16 @@ function loadPropertiesStore(): Property[] {
 }
 
 function savePropertiesStore(properties: Property[]): void {
+  const jsonStr = JSON.stringify(properties, null, 2);
   try {
-    fs.writeFileSync(PROPERTIES_FILE, JSON.stringify(properties, null, 2), 'utf-8');
+    fs.writeFileSync(PROPERTIES_FILE, jsonStr, 'utf-8');
   } catch (err) {
     console.error('Error writing properties store file:', err);
+  }
+  try {
+    fs.writeFileSync(PUBLIC_PROPERTIES_FILE, jsonStr, 'utf-8');
+  } catch (err) {
+    console.error('Error writing public properties store file:', err);
   }
 }
 
@@ -716,6 +731,19 @@ async function startServer() {
   // ==========================================
   // PROPERTY INVENTORY API ENDPOINTS
   // ==========================================
+
+  // Direct static-equivalent JSON endpoints for properties.json
+  app.get(['/properties.json', '/data/properties.json', '/api/properties.json'], (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json(propertiesStore);
+  });
+
+  // Google site verification file
+  app.get('/google350fc9017e0d48f0.html', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    res.send('google-site-verification: google350fc9017e0d48f0.html');
+  });
 
   // 1. Public: Get All Properties
   app.get('/api/properties', (req, res) => {
